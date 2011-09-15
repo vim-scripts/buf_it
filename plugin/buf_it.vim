@@ -1,6 +1,6 @@
 "Author:  zzsu (vimtexhappy@gmail.com)
 "         Buffer list in statusline
-"         2011-02-14 07:07:48 v3.0
+"         2011-02-14 07:07:48 v4.0
 "License: Copyright (c) 2001-2009, zzsu
 "         GNU General Public License version 2 for more details.
 
@@ -8,24 +8,31 @@ if exists('loaded_buf_it') || &cp
     finish
 endif
 
+let g:showInStatusbar = 1
+
 autocmd VimEnter,BufNew,BufEnter,BufWritePost,VimResized * call UpdateStatus()
+autocmd InsertLeave * call BufEcho()
 
 noremap  <m-[>      :call BufPrevPart()<cr>
 noremap  <m-]>      :call BufNextPart()<cr>
+noremap  <m-space>  :call BufEcho()<cr>
 noremap  <leader>bo :call BufOnly()<cr>
 
 let g:bufBStr = ""
 let g:bufNStr= ""
 let g:bufAStr= ""
+let g:statusbarKeepWidth = 20
+hi NowBuf term=bold ctermfg=Cyan guifg=green guibg=blue gui=bold
 
-if !exists("g:statusbarUsrDef") || g:statusbarUsrDef == 0
-    let g:statusbarKeepWidth = 20
-    hi NowBuf term=bold ctermfg=Cyan guifg=green guibg=blue gui=bold
-    set statusline=%m\{%{&ff}:%{&fenc}:%Y}\ %{g:bufBStr}%#NowBuf#%{g:bufNStr}%#StatusLine#%{g:bufAStr}%<%=%l,%c,%P,%L%<
+if exists("g:showInStatusbar")
+    if !exists("g:statusbarUsrDef") || g:statusbarUsrDef == 0
+        set statusline=%m\{%{&ff}:%{&fenc}:%Y}\ %{g:bufBStr}%#NowBuf#%{g:bufNStr}%#StatusLine#%{g:bufAStr}%<%=%l,%c,%P,%L%<
+    endif
 endif
 
 let s:bufNowPartIdx = 0
 let s:bufs = {}
+let s:bufnrs = {}
 let s:bufPartStrList = []
 
 function! BufUnMap()
@@ -63,11 +70,11 @@ function! BufOnly()
 endfun
 
 function! BufChange(idx)
-    exec 'b! '.a:idx
+    exec 'b! '.s:bufnrs[a:idx]
 endfunction
 
 function! BufSplit(idx)
-    exec 'sb! '.a:idx
+    exec 'sb! '.s:bufnrs[a:idx]
 endfunction
 
 function! BufNextPart()
@@ -94,19 +101,26 @@ function! UpdateBufPartStr()
     if s:bufNowPartIdx < len(s:bufPartStrList)-1
         let g:bufAStr = g:bufAStr.'>>'
     endif
+    call BufEcho()
 endfunction
 
 function! UpdateStatus()
     call BufUnMap()
     let s:bufs = {}
+    let s:bufNowPartIdx = 0
+    let s:bufnrs = {}
+    let s:bufPartStrList = []
+    let idx = 1
     let i = 1
     while(i <= bufnr('$'))
         if buflisted(i) && getbufvar(i, "&modifiable")
-            let bufName  =  i."-"
+            let bufName  =  idx."-"
             let bufName .= fnamemodify(bufname(i), ":t")
             let bufName .= getbufvar(i, "&modified")? "+":''
             let bufName .= " "
-            let s:bufs[i] = bufName
+            let s:bufs[idx] = bufName
+            let s:bufnrs[idx] = i
+            let idx += 1
         endif
         let i += 1
     endwhile
@@ -115,9 +129,6 @@ function! UpdateStatus()
         return
     endif
 
-    let s:bufNowPartIdx = 0
-
-    let s:bufPartStrList = []
     let widthForBufStr = winwidth(0) - g:statusbarKeepWidth
     let [POSB,POSN,POSA] = [0, 1, 2]
     let [strB,strN,strA] = ["", "", ""]
@@ -125,7 +136,7 @@ function! UpdateStatus()
     let partIdx = 0
     for i in sort(keys(s:bufs))
         let bufName = s:bufs[i]
-        if bufnr("%") == i
+        if bufnr("%") == s:bufnrs[i]
             let strPos = POSN
         endif
         if strPos == POSB
@@ -149,4 +160,11 @@ function! UpdateStatus()
 
     call UpdateBufPartStr()
     call BufMap()
+    call BufEcho()
+endfunction
+
+function! BufEcho()
+    redraw
+    let msg = g:bufBStr.'['.g:bufNStr.']'.g:bufAStr
+    echo msg
 endfunction
